@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	finalizerName      = "jmeter.jmeter.io/finalizer"
-	labelTestRun       = "jmeter.jmeter.io/testrun"
-	labelRunGroup      = "jmeter.jmeter.io/rungroup"
-	defaultBase  int32 = 50
+	finalizerName       = "jmeter.jmeter.io/finalizer"
+	labelTestRun        = "jmeter.jmeter.io/testrun"
+	labelRunGroup       = "jmeter.jmeter.io/rungroup"
+	defaultBase   int32 = 50
 )
 
 // TestRunReconciler reconciles a TestRun object
@@ -292,6 +292,9 @@ func (r *TestRunReconciler) deleteOwnedPods(ctx context.Context, testRun *jmeter
 }
 
 // buildPod constructs a Pod object for the given run group.
+// If ControllerConfig.PodTemplate is set it is used as the base; the controller
+// then enforces labels, restartPolicy, image, nodeSelector and the three required
+// env vars (TESTRUN_NAME / RUN_GROUP / THREAD_COUNT).
 func (r *TestRunReconciler) buildPod(
 	testRun *jmeterv1.TestRun,
 	groupName, name string,
@@ -302,30 +305,88 @@ func (r *TestRunReconciler) buildPod(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: testRun.Namespace,
-			Labels: map[string]string{
-				labelTestRun:  testRun.Name,
-				labelRunGroup: groupName,
-			},
-		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			NodeSelector:  nodeSelector,
-			Containers: []corev1.Container{
-				{
-					Name:  "jmeter-slave",
-					Image: testRun.Spec.SlaveImage,
-					Env: []corev1.EnvVar{
-						{Name: "TESTRUN_NAME", Value: testRun.Name},
-						{Name: "RUN_GROUP", Value: groupName},
-						{Name: "THREAD_COUNT", Value: strconv.Itoa(int(threadCount))},
-					},
-				},
-			},
 		},
 	}
-	// Set ownerReference so pods are GC-ed when TestRun is deleted (if finalizer removed)
+
+	// Apply controller-level pod template as base
+	if r.Config != nil && r.Config.PodTemplate != nil {
+		tpl := r.Config.PodTemplate.DeepCopy()
+		// Copy annotations and extra labels from template
+		pod.Annotations = tpl.Annotations
+		for k, v := range tpl.Labels {
+			if pod.Labels == nil {
+				pod.Labels = make(map[string]string)
+			}
+			pod.Labels[k] = v
+		}
+		pod.Spec = tpl.Spec
+	}
+
+	// Always enforce controller labels (may overwrite template labels with same key)
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	pod.Labels[labelTestRun] = testRun.Name
+	pod.Labels[labelRunGroup] = groupName
+
+	// Always enforce restartPolicy
+	pod.Spec.RestartPolicy = corev1.RestartPolicyNever
+
+	// Merge nodeSelector: RunGroup selector takes precedence over template
+	if len(nodeSelector) > 0 {
+		if pod.Spec.NodeSelector == nil {
+			pod.Spec.NodeSelector = make(map[string]string)
+		}
+		for k, v := range nodeSelector {
+			pod.Spec.NodeSelector[k] = v
+		}
+	}
+
+	// Find or create the "jmeter-slave" container
+	slaveIdx := -1
+	for i, c := range pod.Spec.Containers {
+		if c.Name == "jmeter-slave" {
+			slaveIdx = i
+			break
+		}
+	}
+	if slaveIdx == -1 {
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "jmeter-slave"})
+		slaveIdx = len(pod.Spec.Containers) - 1
+	}
+
+	// Enforce image and required env vars on the jmeter-slave container
+	pod.Spec.Containers[slaveIdx].Image = testRun.Spec.SlaveImage
+	pod.Spec.Containers[slaveIdx].Env = mergeEnvVars(
+		pod.Spec.Containers[slaveIdx].Env,
+		[]corev1.EnvVar{
+			{Name: "TESTRUN_NAME", Value: testRun.Name},
+			{Name: "RUN_GROUP", Value: groupName},
+			{Name: "THREAD_COUNT", Value: strconv.Itoa(int(threadCount))},
+		},
+	)
+
+	// Set ownerReference so pods are GC-ed when TestRun is deleted
 	_ = controllerutil.SetControllerReference(testRun, pod, r.Scheme)
 	return pod
+}
+
+// mergeEnvVars returns base env vars with overrides applied (override wins on duplicate Name).
+func mergeEnvVars(base, overrides []corev1.EnvVar) []corev1.EnvVar {
+	result := make([]corev1.EnvVar, 0, len(base)+len(overrides))
+	seen := make(map[string]int)
+	for _, e := range base {
+		seen[e.Name] = len(result)
+		result = append(result, e)
+	}
+	for _, e := range overrides {
+		if idx, exists := seen[e.Name]; exists {
+			result[idx] = e
+		} else {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 // podName returns a deterministic pod name.
