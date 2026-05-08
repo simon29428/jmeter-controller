@@ -1,0 +1,7 @@
+---
+# Example controller config — apply as ConfigMap data or mount as file
+# runGroupLimits defines the maximum number of concurrently Running TestRuns
+# per run group name. If a group is not listed, the default limit is 1.
+runGroupLimits:
+  group-a: 2
+  group-b: 1

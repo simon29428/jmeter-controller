@@ -1,0 +1,121 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: testruns.jmeter.jmeter.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.0
+spec:
+  group: jmeter.jmeter.io
+  names:
+    kind: TestRun
+    listKind: TestRunList
+    plural: testruns
+    shortNames:
+    - tr
+    singular: testrun
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: TestRun is the Schema for the testruns API
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TestRunSpec defines the desired state of TestRun
+            properties:
+              runGroups:
+                additionalProperties:
+                  description: RunGroupConfig defines the configuration for a single run group
+                  properties:
+                    base:
+                      description: Base is the number of threads per pod. Defaults to 50.
+                      minimum: 1
+                      type: integer
+                    nodeSelector:
+                      additionalProperties:
+                        type: string
+                      description: NodeSelector is an optional node selector applied to all pods in this run group
+                      type: object
+                    thread:
+                      description: Thread is the total number of threads for this run group
+                      minimum: 1
+                      type: integer
+                  required:
+                  - thread
+                  type: object
+                description: RunGroups is a map of run group name to its configuration
+                minProperties: 1
+                type: object
+              slaveImage:
+                description: SlaveImage is the container image used for JMeter slave pods
+                minLength: 1
+                type: string
+            required:
+            - runGroups
+            - slaveImage
+            type: object
+          status:
+            description: TestRunStatus defines the observed state of TestRun
+            properties:
+              message:
+                description: Message is a human-readable message indicating details about the current phase
+                type: string
+              phase:
+                description: Phase is the current phase of the TestRun
+                enum:
+                - Pending
+                - Waiting
+                - Running
+                - Completed
+                - Failed
+                type: string
+              pods:
+                description: Pods contains information about all slave pods managed by this TestRun
+                items:
+                  description: PodInfo holds information about a single slave pod
+                  properties:
+                    ip:
+                      description: IP is the pod IP address
+                      type: string
+                    name:
+                      description: Name is the pod name
+                      type: string
+                    phase:
+                      description: Phase is the current phase of the pod
+                      type: string
+                    runGroup:
+                      description: RunGroup is the run group this pod belongs to
+                      type: string
+                    threadCount:
+                      description: ThreadCount is the number of threads assigned to this pod
+                      type: integer
+                  required:
+                  - name
+                  - runGroup
+                  - threadCount
+                  type: object
+                type: array
+              startTime:
+                description: StartTime is the time when the TestRun transitioned into Running phase
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

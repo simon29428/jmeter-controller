@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jmeter-controller
+  namespace: jmeter-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jmeter-controller-role
+rules:
+- apiGroups: ["jmeter.jmeter.io"]
+  resources: ["testruns"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["jmeter.jmeter.io"]
+  resources: ["testruns/status"]
+  verbs: ["get", "update", "patch"]
+- apiGroups: ["jmeter.jmeter.io"]
+  resources: ["testruns/finalizers"]
+  verbs: ["update"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jmeter-controller-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jmeter-controller-role
+subjects:
+- kind: ServiceAccount
+  name: jmeter-controller
+  namespace: jmeter-system
