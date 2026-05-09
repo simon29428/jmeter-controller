@@ -1,6 +1,10 @@
 #!/bin/bash
 
-sleep infinity
+echo "Starting JMeter master with the following configuration:"
+echo "TESTRUN_NAME: ${TESTRUN_NAME}"
+echo "SCRIPT_PATH: ${SCRIPT_PATH}"
+echo "REPORT_PATH: ${REPORT_PATH}"
+echo "SLAVE_HOSTS: ${SLAVE_HOSTS}"
 
 jmeter -Dserver.rmi.ssl.disable=true -n -t ${SCRIPT_PATH} -R ${SLAVE_HOSTS} -l ${REPORT_PATH}
 
