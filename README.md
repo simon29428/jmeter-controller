@@ -145,7 +145,7 @@ thread: 80             →  2 個 pod：[50t, 30t]  （base 預設為 50）
 
 ```yaml
 slave:
-  image: alpine/jmeter:5.6
+  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
   mounts:
     - name: jmeter-scripts
       mountPath: /scripts
@@ -155,7 +155,7 @@ slave:
       pvc: test-data-pvc                # 掛載 PVC
 
 master:
-  image: alpine/jmeter:5.6
+  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
   scriptPath: /scripts/test-plan.jmx
   mounts:
     - name: jmeter-scripts
