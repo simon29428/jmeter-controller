@@ -37,6 +37,12 @@ masterPodTemplate:
         volumeMounts:
           - name: jmeter-scripts
             mountPath: /scripts
+        command: ["/scripts/master.sh"]
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
     volumes:
       - name: jmeter-scripts
         configMap:

@@ -6,24 +6,24 @@ metadata:
   namespace: jmeter-system
 spec:
   slave:
-    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.1
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
   master:
-    image: nginx:latest
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
     # env vars are injected before SCRIPT_PATH / REPORT_PATH,
     # so they can be referenced via $(VAR_NAME) in those fields.
     env:
       - name: BASE_DIR
-        value: /scripts
-      - name: REPORT_DIR
-        value: /reports
+        value: /test-plan
     scriptPath: $(BASE_DIR)/test-plan.jmx   # parameterized via $(BASE_DIR)
-    reportPath: $(REPORT_DIR)/output        # parameterized via $(REPORT_DIR)
+    reportPath: $(BASE_DIR)/report          # parameterized via $(BASE_DIR)
+    mounts:
+      - name: test-plan-pvc
+        pvc: test-plan-pvc
+        mountPath: /test-plan/
   runGroups:
-    group-a:
+    emv:
       thread: 120         # ceil(120/50) = 3 pods; pod-0 50t, pod-1 50t, pod-2 20t
       base: 50
       nodeSelector:
         kubernetes.io/os: linux
-    group-b:
-      thread: 80          # ceil(80/50) = 2 pods; pod-0 50t, pod-1 30t
-      # base defaults to 50
+
