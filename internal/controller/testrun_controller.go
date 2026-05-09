@@ -11,11 +11,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	jmeterv1 "jmeter-controller/api/v1"
 	"jmeter-controller/internal/config"
@@ -58,7 +60,7 @@ func (r *TestRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if !controllerutil.ContainsFinalizer(testRun, finalizerName) {
 		controllerutil.AddFinalizer(testRun, finalizerName)
 		if err := r.Update(ctx, testRun); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -99,7 +101,7 @@ func (r *TestRunReconciler) handleDeletion(ctx context.Context, testRun *jmeterv
 
 	controllerutil.RemoveFinalizer(testRun, finalizerName)
 	if err := r.Update(ctx, testRun); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	return ctrl.Result{}, nil
 }
@@ -113,24 +115,27 @@ func (r *TestRunReconciler) checkConcurrentLimits(ctx context.Context, testRun *
 		return false, "", err
 	}
 
-	// Count running TestRuns per run group (excluding self)
-	runningPerGroup := make(map[string]int32)
+	// Count active (Running or Pending) TestRuns per run group (excluding self).
+	// Pending is included because it means the TestRun has already passed the limit
+	// check and is creating pods — it occupies a concurrent slot.
+	activePerGroup := make(map[string]int32)
 	for i := range allRuns.Items {
 		other := &allRuns.Items[i]
 		if other.UID == testRun.UID {
 			continue
 		}
-		if other.Status.Phase != jmeterv1.TestRunPhaseRunning {
+		phase := other.Status.Phase
+		if phase != jmeterv1.TestRunPhaseRunning && phase != jmeterv1.TestRunPhasePending {
 			continue
 		}
 		for groupName := range other.Spec.RunGroups {
-			runningPerGroup[groupName]++
+			activePerGroup[groupName]++
 		}
 	}
 
 	for groupName := range testRun.Spec.RunGroups {
 		limit := r.Config.MaxConcurrentForGroup(groupName)
-		if runningPerGroup[groupName] >= limit {
+		if limit > 0 && activePerGroup[groupName] >= limit {
 			return true, fmt.Sprintf("run group %q has reached its concurrent limit of %d", groupName, limit), nil
 		}
 	}
@@ -211,7 +216,7 @@ func (r *TestRunReconciler) updateStatus(ctx context.Context, testRun *jmeterv1.
 	}
 
 	if err := r.Status().Patch(ctx, testRun, patch); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	return ctrl.Result{}, nil
 }
@@ -260,7 +265,7 @@ func (r *TestRunReconciler) setPhase(ctx context.Context, testRun *jmeterv1.Test
 	testRun.Status.Phase = phase
 	testRun.Status.Message = message
 	if err := r.Status().Patch(ctx, testRun, patch); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	return result, nil
 }
@@ -416,5 +421,47 @@ func (r *TestRunReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &jmeterv1.TestRun{}, handler.OnlyControllerOwner()),
 		).
+		// Watch all TestRuns: when one reaches a terminal phase, immediately
+		// re-enqueue all Waiting TestRuns in the same namespace.
+		Watches(
+			&jmeterv1.TestRun{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueWaitingTestRuns),
+		).
 		Complete(r)
+}
+
+// enqueueWaitingTestRuns is invoked whenever any TestRun changes.
+// When a TestRun reaches Completed or Failed it frees up a concurrent slot, so
+// we immediately re-enqueue all Waiting TestRuns in the same namespace.
+func (r *TestRunReconciler) enqueueWaitingTestRuns(ctx context.Context, obj client.Object) []reconcile.Request {
+	testRun, ok := obj.(*jmeterv1.TestRun)
+	if !ok {
+		return nil
+	}
+	// Only act when a slot has been freed
+	phase := testRun.Status.Phase
+	if phase != jmeterv1.TestRunPhaseCompleted && phase != jmeterv1.TestRunPhaseFailed {
+		return nil
+	}
+
+	allRuns := &jmeterv1.TestRunList{}
+	if err := r.List(ctx, allRuns, client.InNamespace(testRun.Namespace)); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, tr := range allRuns.Items {
+		if tr.UID == testRun.UID {
+			continue
+		}
+		if tr.Status.Phase == jmeterv1.TestRunPhaseWaiting {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: tr.Namespace,
+					Name:      tr.Name,
+				},
+			})
+		}
+	}
+	return requests
 }

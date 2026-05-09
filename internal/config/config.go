@@ -28,15 +28,15 @@ type ControllerConfig struct {
 }
 
 // MaxConcurrentForGroup returns the max concurrent TestRun limit for a given
-// run group. If no explicit limit is configured, defaults to 1.
+// run group. Returns 0 (unlimited) if no explicit limit is configured for the group.
 func (c *ControllerConfig) MaxConcurrentForGroup(groupName string) int32 {
 	if c == nil || c.RunGroupLimits == nil {
-		return 1
+		return 0
 	}
 	if limit, ok := c.RunGroupLimits[groupName]; ok && limit > 0 {
 		return limit
 	}
-	return 1
+	return 0
 }
 
 // LoadConfig reads and parses the controller config YAML file at the given path.
