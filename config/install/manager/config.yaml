@@ -1,0 +1,49 @@
+runGroupLimits:
+      EMV: 2
+
+podTemplate:
+  spec:
+    terminationGracePeriodSeconds: 30
+    containers:
+      - name: jmeter-slave        # must be named "jmeter-slave"
+        resources:
+          requests:
+            cpu: "1024m"
+            memory: "1024Mi"
+          limits:
+            cpu: "1024m"
+            memory: "1024Mi"
+        volumeMounts:
+          - name: jmeter-scripts
+            mountPath: /scripts
+    volumes:
+      - name: jmeter-scripts
+        configMap:
+          name: jmeter-scripts
+  
+masterPodTemplate:
+  metadata:
+    annotations:
+      prometheus.io/scrape: "false"
+  spec:
+    tolerations:
+      - key: "jmeter"
+        operator: "Equal"
+        value: "master"
+        effect: "NoSchedule"
+    containers:
+      - name: jmeter-master       # must be named "jmeter-master"
+        resources:
+          requests:
+            cpu: "1024m"
+            memory: "1024Mi"
+          limits:
+            cpu: "1024m"
+            memory: "2048Mi"
+        volumeMounts:
+          - name: jmeter-scripts
+            mountPath: /scripts
+    volumes:
+      - name: jmeter-scripts
+        configMap:
+          name: jmeter-scripts

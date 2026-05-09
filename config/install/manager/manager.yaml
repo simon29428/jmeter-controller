@@ -4,17 +4,6 @@ kind: Namespace
 metadata:
   name: jmeter-system
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: jmeter-controller-config
-  namespace: jmeter-system
-data:
-  config.yaml: |
-    runGroupLimits:
-      group-a: 2
-      group-b: 1
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
