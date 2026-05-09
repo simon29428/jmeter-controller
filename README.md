@@ -98,6 +98,7 @@ spec:
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
 | `image` | string | ✅ | Worker pod 使用的容器映像 |
+| `env` | []EnvVar | — | 注入至每個 worker 容器的額外環境變數，支援 `$(VAR_NAME)` 替換語法 |
 | `mounts` | []MountSpec | — | 掛載到 worker pod 的 Volume（見[掛載設定](#掛載設定configmap--pvc)）|
 
 ### spec.master
@@ -107,7 +108,9 @@ spec:
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
 | `image` | string | ✅ | Master pod 使用的容器映像 |
-| `scriptPath` | string | ✅ | Master 容器內 `.jmx` 測試腳本的路徑，以 `SCRIPT_PATH` 環境變數注入 |
+| `scriptPath` | string | ✅ | Master 容器內 `.jmx` 測試腳本的路徑，以 `SCRIPT_PATH` 環境變數注入。支援 `$(VAR_NAME)` 替換語法 |
+| `reportPath` | string | — | 測試報告輸出目錄，以 `REPORT_PATH` 環境變數注入。支援 `$(VAR_NAME)` 替換語法 |
+| `env` | []EnvVar | — | 注入至 master 容器的額外環境變數，支援 `$(VAR_NAME)` 替換語法。於 `SCRIPT_PATH` 與 `REPORT_PATH` 之前注入，可供兩者引用 |
 | `mounts` | []MountSpec | — | 掛載到 master pod 的 Volume（見[掛載設定](#掛載設定configmap--pvc)）|
 
 ### spec.runGroups
@@ -331,6 +334,7 @@ masterPodTemplate:
 | `TESTRUN_NAME` | TestRun 名稱 |
 | `SLAVE_HOSTS` | 所有 worker pod IP 的逗號分隔列表（例如 `10.0.0.1,10.0.0.2`）|
 | `SCRIPT_PATH` | `spec.master.scriptPath` 的值 |
+| `REPORT_PATH` | `spec.master.reportPath` 的值（僅在設定時注入）|
 
 ---
 
