@@ -1,5 +1,5 @@
 ---
-apiVersion: jmeter.jmeter.io/v1
+apiVersion: jmeter.io/v1
 kind: TestRun
 metadata:
   name: example-testrun
@@ -13,7 +13,15 @@ spec:
         configMap: jmeter-scripts     # mount a ConfigMap
   master:
     image: nginx:latest
-    scriptPath: /scripts/test-plan.jmx
+    # env vars are injected before SCRIPT_PATH / REPORT_PATH,
+    # so they can be referenced via $(VAR_NAME) in those fields.
+    env:
+      - name: BASE_DIR
+        value: /scripts
+      - name: REPORT_DIR
+        value: /reports
+    scriptPath: $(BASE_DIR)/test-plan.jmx   # parameterized via $(BASE_DIR)
+    reportPath: $(REPORT_DIR)/output        # parameterized via $(REPORT_DIR)
     mounts:
       - name: jmeter-scripts
         mountPath: /scripts

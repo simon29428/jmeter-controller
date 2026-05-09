@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	finalizerName         = "jmeter.jmeter.io/finalizer"
-	labelTestRun          = "jmeter.jmeter.io/testrun"
-	labelRunGroup         = "jmeter.jmeter.io/rungroup"
+	finalizerName         = "jmeter.io/finalizer"
+	labelTestRun          = "jmeter.io/testrun"
+	labelRunGroup         = "jmeter.io/rungroup"
 	labelRole             = "jmeter.jmeter.io/role"
 	labelRoleWorker       = "worker"
 	labelRoleMaster       = "master"
@@ -41,9 +41,9 @@ type TestRunReconciler struct {
 	Config *config.ControllerConfig
 }
 
-// +kubebuilder:rbac:groups=jmeter.jmeter.io,resources=testruns,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=jmeter.jmeter.io,resources=testruns/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=jmeter.jmeter.io,resources=testruns/finalizers,verbs=update
+// +kubebuilder:rbac:groups=jmeter.io,resources=testruns,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=jmeter.io,resources=testruns/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=jmeter.io,resources=testruns/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 
 func (r *TestRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -462,6 +462,10 @@ func (r *TestRunReconciler) buildPod(
 	pod.Spec.Containers[slaveIdx].Image = testRun.Spec.Slave.Image
 	pod.Spec.Containers[slaveIdx].Env = mergeEnvVars(
 		pod.Spec.Containers[slaveIdx].Env,
+		testRun.Spec.Slave.Env,
+	)
+	pod.Spec.Containers[slaveIdx].Env = mergeEnvVars(
+		pod.Spec.Containers[slaveIdx].Env,
 		[]corev1.EnvVar{
 			{Name: "TESTRUN_NAME", Value: testRun.Name},
 			{Name: "RUN_GROUP", Value: groupName},
@@ -672,11 +676,19 @@ func (r *TestRunReconciler) buildMasterPod(testRun *jmeterv1.TestRun, name, slav
 	pod.Spec.Containers[masterIdx].Image = testRun.Spec.Master.Image
 	pod.Spec.Containers[masterIdx].Env = mergeEnvVars(
 		pod.Spec.Containers[masterIdx].Env,
-		[]corev1.EnvVar{
-			{Name: "TESTRUN_NAME", Value: testRun.Name},
-			{Name: "SLAVE_HOSTS", Value: slaveHosts},
-			{Name: "SCRIPT_PATH", Value: testRun.Spec.Master.ScriptPath},
-		},
+		testRun.Spec.Master.Env,
+	)
+	controllerEnvVars := []corev1.EnvVar{
+		{Name: "TESTRUN_NAME", Value: testRun.Name},
+		{Name: "SLAVE_HOSTS", Value: slaveHosts},
+		{Name: "SCRIPT_PATH", Value: testRun.Spec.Master.ScriptPath},
+	}
+	if testRun.Spec.Master.ReportPath != "" {
+		controllerEnvVars = append(controllerEnvVars, corev1.EnvVar{Name: "REPORT_PATH", Value: testRun.Spec.Master.ReportPath})
+	}
+	pod.Spec.Containers[masterIdx].Env = mergeEnvVars(
+		pod.Spec.Containers[masterIdx].Env,
+		controllerEnvVars,
 	)
 
 	// Apply TestRun-level mounts to the master container.

@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	labelTestRun  = "jmeter.jmeter.io/testrun"
-	labelRunGroup = "jmeter.jmeter.io/rungroup"
+	labelTestRun  = "jmeter.io/testrun"
+	labelRunGroup = "jmeter.io/rungroup"
 )
 
 // PodResponse is the JSON response body for a single pod entry

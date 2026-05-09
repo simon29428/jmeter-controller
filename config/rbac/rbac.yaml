@@ -10,13 +10,13 @@ kind: ClusterRole
 metadata:
   name: jmeter-controller-role
 rules:
-- apiGroups: ["jmeter.jmeter.io"]
+- apiGroups: ["jmeter.io"]
   resources: ["testruns"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["jmeter.jmeter.io"]
+- apiGroups: ["jmeter.io"]
   resources: ["testruns/status"]
   verbs: ["get", "update", "patch"]
-- apiGroups: ["jmeter.jmeter.io"]
+- apiGroups: ["jmeter.io"]
   resources: ["testruns/finalizers"]
   verbs: ["update"]
 - apiGroups: [""]

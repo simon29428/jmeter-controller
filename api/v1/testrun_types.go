@@ -32,6 +32,12 @@ type SlaveSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 
+	// Env defines additional environment variables injected into each slave container.
+	// Values support Kubernetes $(VAR_NAME) substitution referencing other env vars
+	// defined earlier in the list.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
 	// Mounts defines additional volumes (ConfigMap or PVC) to mount into slave pods.
 	// +optional
 	Mounts []MountSpec `json:"mounts,omitempty"`
@@ -45,8 +51,22 @@ type MasterSpec struct {
 
 	// ScriptPath is the path to the JMeter test script (.jmx) to execute.
 	// The value is passed to the master container as the SCRIPT_PATH environment variable.
+	// Supports Kubernetes $(VAR_NAME) substitution referencing env vars defined in Env.
 	// +kubebuilder:validation:MinLength=1
 	ScriptPath string `json:"scriptPath"`
+
+	// ReportPath is the output directory for the JMeter test report.
+	// The value is passed to the master container as the REPORT_PATH environment variable.
+	// Supports Kubernetes $(VAR_NAME) substitution referencing env vars defined in Env.
+	// +optional
+	ReportPath string `json:"reportPath,omitempty"`
+
+	// Env defines additional environment variables injected into the master container.
+	// Values support Kubernetes $(VAR_NAME) substitution referencing other env vars
+	// defined earlier in the list. These are injected before SCRIPT_PATH and REPORT_PATH,
+	// so they can be referenced by those fields via $(VAR_NAME) syntax.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 
 	// Mounts defines additional volumes (ConfigMap or PVC) to mount into the master pod.
 	// +optional

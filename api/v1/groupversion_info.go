@@ -1,6 +1,6 @@
 // Package v1 contains API Schema definitions for the jmeter v1 API group
 // +kubebuilder:object:generate=true
-// +groupName=jmeter.jmeter.io
+// +groupName=jmeter.io
 package v1
 
 import (
@@ -10,7 +10,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects
-	GroupVersion = schema.GroupVersion{Group: "jmeter.jmeter.io", Version: "v1"}
+	GroupVersion = schema.GroupVersion{Group: "jmeter.io", Version: "v1"}
 
 	// SchemeBuilder is used to add functions to this group's scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
