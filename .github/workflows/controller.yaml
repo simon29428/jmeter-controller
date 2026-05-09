@@ -1,7 +1,7 @@
-name: Jmeter Image Build and Push
+name: Jmeter Controller Image Build and Push
 on:
   push:
-    tags: [ 'base-v*' ]
+    tags: [ 'v*' ]
 permissions:
   contents: read
   packages: write
@@ -22,8 +22,8 @@ jobs:
       - name: Build and Push
         uses: docker/build-push-action@v7
         with:
-          context: images/jmeter
+          context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-jmeter:latest
-            ghcr.io/${{ github.repository }}-jmeter:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}-main:latest
+            ghcr.io/${{ github.repository }}-main:${{ github.ref_name }}
