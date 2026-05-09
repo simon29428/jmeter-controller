@@ -26,5 +26,5 @@ jobs:
           context: images/jmeter
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-jmeter:latest
+            ghcr.io/${{ github.repository }}-jmeter:${{ github.sha }}
