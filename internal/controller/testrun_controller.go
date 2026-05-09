@@ -675,6 +675,7 @@ func (r *TestRunReconciler) buildMasterPod(testRun *jmeterv1.TestRun, name, slav
 		[]corev1.EnvVar{
 			{Name: "TESTRUN_NAME", Value: testRun.Name},
 			{Name: "SLAVE_HOSTS", Value: slaveHosts},
+			{Name: "SCRIPT_PATH", Value: testRun.Spec.Master.ScriptPath},
 		},
 	)
 

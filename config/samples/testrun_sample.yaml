@@ -13,6 +13,7 @@ spec:
         configMap: jmeter-scripts     # mount a ConfigMap
   master:
     image: nginx:latest
+    scriptPath: /scripts/test-plan.jmx
     mounts:
       - name: jmeter-scripts
         mountPath: /scripts

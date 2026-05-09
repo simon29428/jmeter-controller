@@ -43,6 +43,11 @@ type MasterSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 
+	// ScriptPath is the path to the JMeter test script (.jmx) to execute.
+	// The value is passed to the master container as the SCRIPT_PATH environment variable.
+	// +kubebuilder:validation:MinLength=1
+	ScriptPath string `json:"scriptPath"`
+
 	// Mounts defines additional volumes (ConfigMap or PVC) to mount into the master pod.
 	// +optional
 	Mounts []MountSpec `json:"mounts,omitempty"`

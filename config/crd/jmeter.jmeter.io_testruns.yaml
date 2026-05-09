@@ -101,6 +101,10 @@ spec:
                     description: Image is the container image used for the JMeter master pod.
                     minLength: 1
                     type: string
+                  scriptPath:
+                    description: ScriptPath is the path to the JMeter test script (.jmx) to execute. Passed to the master container as the SCRIPT_PATH environment variable.
+                    minLength: 1
+                    type: string
                   mounts:
                     description: Mounts defines additional volumes (ConfigMap or PVC) to mount into the master pod.
                     items:
@@ -127,6 +131,7 @@ spec:
                     type: array
                 required:
                 - image
+                - scriptPath
                 type: object
             required:
             - runGroups
