@@ -28,3 +28,5 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}-jmeter:latest
             ghcr.io/${{ github.repository }}-jmeter:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
