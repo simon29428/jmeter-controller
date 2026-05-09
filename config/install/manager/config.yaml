@@ -16,21 +16,15 @@ podTemplate:
         volumeMounts:
           - name: jmeter-scripts
             mountPath: /scripts
+        command: ["/scripts/slave.sh"]
     volumes:
       - name: jmeter-scripts
         configMap:
           name: jmeter-scripts
+          defaultMode: 0755
   
 masterPodTemplate:
-  metadata:
-    annotations:
-      prometheus.io/scrape: "false"
   spec:
-    tolerations:
-      - key: "jmeter"
-        operator: "Equal"
-        value: "master"
-        effect: "NoSchedule"
     containers:
       - name: jmeter-master       # must be named "jmeter-master"
         resources:
@@ -47,3 +41,4 @@ masterPodTemplate:
       - name: jmeter-scripts
         configMap:
           name: jmeter-scripts
+          defaultMode: 0755

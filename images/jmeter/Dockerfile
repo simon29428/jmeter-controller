@@ -10,6 +10,8 @@ RUN tar -xzf /tmp/apache-jmeter-5.6.3.tgz -C /tmp/ && \
 
 ENV PATH="/opt/jmeter/bin:${PATH}"
 
+ENV HOME=/jmeter-workspace
+
 USER 1000
 
 ENTRYPOINT ["/opt/jmeter/bin/jmeter.sh"]

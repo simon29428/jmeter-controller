@@ -3,14 +3,10 @@ apiVersion: jmeter.io/v1
 kind: TestRun
 metadata:
   name: example-testrun
-  namespace: default
+  namespace: jmeter-system
 spec:
   slave:
-    image: nginx:latest
-    mounts:
-      - name: jmeter-scripts
-        mountPath: /scripts
-        configMap: jmeter-scripts     # mount a ConfigMap
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.1
   master:
     image: nginx:latest
     # env vars are injected before SCRIPT_PATH / REPORT_PATH,
@@ -22,10 +18,6 @@ spec:
         value: /reports
     scriptPath: $(BASE_DIR)/test-plan.jmx   # parameterized via $(BASE_DIR)
     reportPath: $(REPORT_DIR)/output        # parameterized via $(REPORT_DIR)
-    mounts:
-      - name: jmeter-scripts
-        mountPath: /scripts
-        configMap: jmeter-scripts
   runGroups:
     group-a:
       thread: 120         # ceil(120/50) = 3 pods; pod-0 50t, pod-1 50t, pod-2 20t
