@@ -5,6 +5,49 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// MountSpec defines a volume (ConfigMap or PVC) to be mounted into all pods of a TestRun.
+type MountSpec struct {
+	// Name is the unique name for this volume, used as the Kubernetes volume name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// MountPath is the absolute path in the container where the volume is mounted.
+	// +kubebuilder:validation:MinLength=1
+	MountPath string `json:"mountPath"`
+
+	// ConfigMap is the name of the ConfigMap to mount.
+	// Mutually exclusive with PVC.
+	// +optional
+	ConfigMap string `json:"configMap,omitempty"`
+
+	// PVC is the name of the PersistentVolumeClaim to mount.
+	// Mutually exclusive with ConfigMap.
+	// +optional
+	PVC string `json:"pvc,omitempty"`
+}
+
+// SlaveSpec defines the configuration for JMeter worker (slave) pods.
+type SlaveSpec struct {
+	// Image is the container image used for JMeter slave pods.
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// Mounts defines additional volumes (ConfigMap or PVC) to mount into slave pods.
+	// +optional
+	Mounts []MountSpec `json:"mounts,omitempty"`
+}
+
+// MasterSpec defines the configuration for the JMeter master pod.
+type MasterSpec struct {
+	// Image is the container image used for the JMeter master pod.
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// Mounts defines additional volumes (ConfigMap or PVC) to mount into the master pod.
+	// +optional
+	Mounts []MountSpec `json:"mounts,omitempty"`
+}
+
 // RunGroupConfig defines the configuration for a single run group
 type RunGroupConfig struct {
 	// Thread is the total number of threads for this run group
@@ -23,9 +66,15 @@ type RunGroupConfig struct {
 
 // TestRunSpec defines the desired state of TestRun
 type TestRunSpec struct {
-	// SlaveImage is the container image used for JMeter slave pods
-	// +kubebuilder:validation:MinLength=1
-	SlaveImage string `json:"slaveImage"`
+	// Slave defines the configuration for JMeter worker (slave) pods.
+	Slave SlaveSpec `json:"slave"`
+
+	// Master defines the configuration for the JMeter master pod.
+	// When set, the controller waits for all worker pods to become Ready, then
+	// creates a single master pod with SLAVE_HOSTS set to the comma-separated
+	// list of worker IP addresses. If nil, no master pod is created.
+	// +optional
+	Master *MasterSpec `json:"master,omitempty"`
 
 	// RunGroups is a map of run group name to its configuration
 	// +kubebuilder:validation:MinProperties=1
@@ -36,11 +85,12 @@ type TestRunSpec struct {
 type TestRunPhase string
 
 const (
-	TestRunPhasePending   TestRunPhase = "Pending"
-	TestRunPhaseWaiting   TestRunPhase = "Waiting"
-	TestRunPhaseRunning   TestRunPhase = "Running"
-	TestRunPhaseCompleted TestRunPhase = "Completed"
-	TestRunPhaseFailed    TestRunPhase = "Failed"
+	TestRunPhasePending      TestRunPhase = "Pending"
+	TestRunPhaseWaiting      TestRunPhase = "Waiting"
+	TestRunPhaseWorkersReady TestRunPhase = "WorkersReady"
+	TestRunPhaseRunning      TestRunPhase = "Running"
+	TestRunPhaseCompleted    TestRunPhase = "Completed"
+	TestRunPhaseFailed       TestRunPhase = "Failed"
 )
 
 // PodInfo holds information about a single slave pod
@@ -66,7 +116,7 @@ type PodInfo struct {
 // TestRunStatus defines the observed state of TestRun
 type TestRunStatus struct {
 	// Phase is the current phase of the TestRun
-	// +kubebuilder:validation:Enum=Pending;Waiting;Running;Completed;Failed
+	// +kubebuilder:validation:Enum=Pending;Waiting;WorkersReady;Running;Completed;Failed
 	// +optional
 	Phase TestRunPhase `json:"phase,omitempty"`
 
@@ -78,9 +128,13 @@ type TestRunStatus struct {
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 
-	// Pods contains information about all slave pods managed by this TestRun
+	// Pods contains information about all worker pods managed by this TestRun
 	// +optional
 	Pods []PodInfo `json:"pods,omitempty"`
+
+	// MasterPod contains information about the master pod, if one has been created
+	// +optional
+	MasterPod *PodInfo `json:"masterPod,omitempty"`
 }
 
 // +kubebuilder:object:root=true

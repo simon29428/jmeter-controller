@@ -5,7 +5,18 @@ metadata:
   name: example-testrun
   namespace: default
 spec:
-  slaveImage: nginx:latest
+  slave:
+    image: nginx:latest
+    mounts:
+      - name: jmeter-scripts
+        mountPath: /scripts
+        configMap: jmeter-scripts     # mount a ConfigMap
+  master:
+    image: nginx:latest
+    mounts:
+      - name: jmeter-scripts
+        mountPath: /scripts
+        configMap: jmeter-scripts
   runGroups:
     group-a:
       thread: 120         # ceil(120/50) = 3 pods; pod-0 50t, pod-1 50t, pod-2 20t

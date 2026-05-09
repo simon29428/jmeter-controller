@@ -25,6 +25,15 @@ type ControllerConfig struct {
 	// All other fields (resources, volumeMounts, volumes, tolerations, affinity, etc.)
 	// are taken from this template as-is.
 	PodTemplate *corev1.PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// MasterPodTemplate is the base template applied to the master pod created by the controller.
+	// The controller always enforces:
+	//   - metadata.labels: jmeter.jmeter.io/testrun and jmeter.jmeter.io/role=master
+	//   - spec.restartPolicy: Never
+	//   - the "jmeter-master" container image and TESTRUN_NAME/SLAVE_HOSTS env vars
+	// All other fields (resources, volumeMounts, volumes, tolerations, affinity, etc.)
+	// are taken from this template as-is.
+	MasterPodTemplate *corev1.PodTemplateSpec `json:"masterPodTemplate,omitempty"`
 }
 
 // MaxConcurrentForGroup returns the max concurrent TestRun limit for a given

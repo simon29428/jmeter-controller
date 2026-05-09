@@ -60,13 +60,77 @@ spec:
                 description: RunGroups is a map of run group name to its configuration
                 minProperties: 1
                 type: object
-              slaveImage:
-                description: SlaveImage is the container image used for JMeter slave pods
-                minLength: 1
-                type: string
+              slave:
+                description: Slave defines the configuration for JMeter worker (slave) pods.
+                properties:
+                  image:
+                    description: Image is the container image used for JMeter slave pods.
+                    minLength: 1
+                    type: string
+                  mounts:
+                    description: Mounts defines additional volumes (ConfigMap or PVC) to mount into slave pods.
+                    items:
+                      description: MountSpec defines a volume to be mounted into pods.
+                      properties:
+                        configMap:
+                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with PVC.
+                          type: string
+                        mountPath:
+                          description: MountPath is the absolute path in the container where the volume is mounted.
+                          minLength: 1
+                          type: string
+                        name:
+                          description: Name is the unique name for this volume, used as the Kubernetes volume name.
+                          minLength: 1
+                          type: string
+                        pvc:
+                          description: PVC is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
+                          type: string
+                      required:
+                      - mountPath
+                      - name
+                      type: object
+                    type: array
+                required:
+                - image
+                type: object
+              master:
+                description: Master defines the configuration for the JMeter master pod. When set, the controller waits for all worker pods to become Ready, then creates a single master pod with SLAVE_HOSTS set to the comma-separated list of worker IP addresses.
+                properties:
+                  image:
+                    description: Image is the container image used for the JMeter master pod.
+                    minLength: 1
+                    type: string
+                  mounts:
+                    description: Mounts defines additional volumes (ConfigMap or PVC) to mount into the master pod.
+                    items:
+                      description: MountSpec defines a volume to be mounted into pods.
+                      properties:
+                        configMap:
+                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with PVC.
+                          type: string
+                        mountPath:
+                          description: MountPath is the absolute path in the container where the volume is mounted.
+                          minLength: 1
+                          type: string
+                        name:
+                          description: Name is the unique name for this volume, used as the Kubernetes volume name.
+                          minLength: 1
+                          type: string
+                        pvc:
+                          description: PVC is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
+                          type: string
+                      required:
+                      - mountPath
+                      - name
+                      type: object
+                    type: array
+                required:
+                - image
+                type: object
             required:
             - runGroups
-            - slaveImage
+            - slave
             type: object
           status:
             description: TestRunStatus defines the observed state of TestRun
@@ -79,12 +143,13 @@ spec:
                 enum:
                 - Pending
                 - Waiting
+                - WorkersReady
                 - Running
                 - Completed
                 - Failed
                 type: string
               pods:
-                description: Pods contains information about all slave pods managed by this TestRun
+                description: Pods contains information about all worker pods managed by this TestRun
                 items:
                   description: PodInfo holds information about a single slave pod
                   properties:
@@ -109,6 +174,29 @@ spec:
                   - threadCount
                   type: object
                 type: array
+              masterPod:
+                description: MasterPod contains information about the master pod, if one has been created
+                properties:
+                  ip:
+                    description: IP is the pod IP address
+                    type: string
+                  name:
+                    description: Name is the pod name
+                    type: string
+                  phase:
+                    description: Phase is the current phase of the pod
+                    type: string
+                  runGroup:
+                    description: RunGroup is the run group this pod belongs to
+                    type: string
+                  threadCount:
+                    description: ThreadCount is the number of threads assigned to this pod
+                    type: integer
+                required:
+                - name
+                - runGroup
+                - threadCount
+                type: object
               startTime:
                 description: StartTime is the time when the TestRun transitioned into Running phase
                 format: date-time

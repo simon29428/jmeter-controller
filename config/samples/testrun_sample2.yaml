@@ -5,7 +5,8 @@ metadata:
   name: example-testrun2
   namespace: default
 spec:
-  slaveImage: nginx:latest
+  slave:
+    image: nginx:latest
   runGroups:
     group-a:
       thread: 120         # ceil(120/50) = 3 pods; pod-0 50t, pod-1 50t, pod-2 20t

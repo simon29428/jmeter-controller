@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,10 +25,13 @@ import (
 )
 
 const (
-	finalizerName       = "jmeter.jmeter.io/finalizer"
-	labelTestRun        = "jmeter.jmeter.io/testrun"
-	labelRunGroup       = "jmeter.jmeter.io/rungroup"
-	defaultBase   int32 = 50
+	finalizerName         = "jmeter.jmeter.io/finalizer"
+	labelTestRun          = "jmeter.jmeter.io/testrun"
+	labelRunGroup         = "jmeter.jmeter.io/rungroup"
+	labelRole             = "jmeter.jmeter.io/role"
+	labelRoleWorker       = "worker"
+	labelRoleMaster       = "master"
+	defaultBase     int32 = 50
 )
 
 // TestRunReconciler reconciles a TestRun object
@@ -80,8 +84,19 @@ func (r *TestRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return r.setPhase(ctx, testRun, jmeterv1.TestRunPhaseWaiting, waitMsg, ctrl.Result{RequeueAfter: 30 * time.Second})
 	}
 
-	// Ensure all pods exist
+	// Ensure all worker pods exist
 	if err := r.reconcilePods(ctx, testRun); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Fetch current worker pods to determine if master should be started
+	workerPods, err := r.listOwnedWorkerPods(ctx, testRun)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Once all workers are ready, create the master pod if configured
+	if err := r.reconcileMasterPod(ctx, testRun, workerPods); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -125,7 +140,7 @@ func (r *TestRunReconciler) checkConcurrentLimits(ctx context.Context, testRun *
 			continue
 		}
 		phase := other.Status.Phase
-		if phase != jmeterv1.TestRunPhaseRunning && phase != jmeterv1.TestRunPhasePending {
+		if phase != jmeterv1.TestRunPhaseRunning && phase != jmeterv1.TestRunPhasePending && phase != jmeterv1.TestRunPhaseWorkersReady {
 			continue
 		}
 		for groupName := range other.Spec.RunGroups {
@@ -146,7 +161,7 @@ func (r *TestRunReconciler) checkConcurrentLimits(ctx context.Context, testRun *
 func (r *TestRunReconciler) reconcilePods(ctx context.Context, testRun *jmeterv1.TestRun) error {
 	logger := log.FromContext(ctx)
 
-	existingPods, err := r.listOwnedPods(ctx, testRun)
+	existingPods, err := r.listOwnedWorkerPods(ctx, testRun)
 	if err != nil {
 		return err
 	}
@@ -189,13 +204,18 @@ func (r *TestRunReconciler) reconcilePods(ctx context.Context, testRun *jmeterv1
 
 // updateStatus lists all owned pods and updates TestRun.Status accordingly.
 func (r *TestRunReconciler) updateStatus(ctx context.Context, testRun *jmeterv1.TestRun) (ctrl.Result, error) {
-	pods, err := r.listOwnedPods(ctx, testRun)
+	workerPods, err := r.listOwnedWorkerPods(ctx, testRun)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	podInfos := make([]jmeterv1.PodInfo, 0, len(pods))
-	for _, pod := range pods {
+	masterPod, err := r.listOwnedMasterPod(ctx, testRun)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	podInfos := make([]jmeterv1.PodInfo, 0, len(workerPods))
+	for _, pod := range workerPods {
 		podInfos = append(podInfos, jmeterv1.PodInfo{
 			Name:        pod.Name,
 			IP:          pod.Status.PodIP,
@@ -205,9 +225,19 @@ func (r *TestRunReconciler) updateStatus(ctx context.Context, testRun *jmeterv1.
 		})
 	}
 
-	phase, message := computePhase(testRun, pods)
+	var masterPodInfo *jmeterv1.PodInfo
+	if masterPod != nil {
+		masterPodInfo = &jmeterv1.PodInfo{
+			Name:  masterPod.Name,
+			IP:    masterPod.Status.PodIP,
+			Phase: masterPod.Status.Phase,
+		}
+	}
+
+	phase, message := computePhase(testRun, workerPods, masterPod)
 	patch := client.MergeFrom(testRun.DeepCopy())
 	testRun.Status.Pods = podInfos
+	testRun.Status.MasterPod = masterPodInfo
 	testRun.Status.Phase = phase
 	testRun.Status.Message = message
 	if phase == jmeterv1.TestRunPhaseRunning && testRun.Status.StartTime == nil {
@@ -222,8 +252,9 @@ func (r *TestRunReconciler) updateStatus(ctx context.Context, testRun *jmeterv1.
 }
 
 // computePhase determines the overall TestRun phase from the owned pods.
-func computePhase(testRun *jmeterv1.TestRun, pods []corev1.Pod) (jmeterv1.TestRunPhase, string) {
-	// Calculate expected total pod count
+// masterPod may be nil if not yet created or if spec.master is not set.
+func computePhase(testRun *jmeterv1.TestRun, workerPods []corev1.Pod, masterPod *corev1.Pod) (jmeterv1.TestRunPhase, string) {
+	// Calculate expected total worker pod count
 	expectedCount := 0
 	for _, g := range testRun.Spec.RunGroups {
 		base := g.Base
@@ -233,30 +264,78 @@ func computePhase(testRun *jmeterv1.TestRun, pods []corev1.Pod) (jmeterv1.TestRu
 		expectedCount += int(math.Ceil(float64(g.Thread) / float64(base)))
 	}
 
-	if len(pods) == 0 {
-		return jmeterv1.TestRunPhasePending, "Waiting for pods to start"
+	if len(workerPods) == 0 {
+		return jmeterv1.TestRunPhasePending, "Waiting for worker pods to start"
 	}
 
-	allDone := true
-	anyFailed := false
-	for _, pod := range pods {
-		switch pod.Status.Phase {
-		case corev1.PodSucceeded:
-			// done
-		case corev1.PodFailed:
-			anyFailed = true
-		default:
-			allDone = false
+	// When no master is configured, use the original worker-only logic.
+	if testRun.Spec.Master == nil {
+		allDone := true
+		anyFailed := false
+		for _, pod := range workerPods {
+			switch pod.Status.Phase {
+			case corev1.PodSucceeded:
+				// done
+			case corev1.PodFailed:
+				anyFailed = true
+			default:
+				allDone = false
+			}
+		}
+		if allDone && len(workerPods) >= expectedCount {
+			if anyFailed {
+				return jmeterv1.TestRunPhaseFailed, "One or more pods failed"
+			}
+			return jmeterv1.TestRunPhaseCompleted, "All pods completed successfully"
+		}
+		return jmeterv1.TestRunPhaseRunning, fmt.Sprintf("%d/%d pods running", len(workerPods), expectedCount)
+	}
+
+	// Master-enabled mode: wait for all workers to be Ready before starting master.
+	readyCount := 0
+	for i := range workerPods {
+		if isPodReady(&workerPods[i]) {
+			readyCount++
 		}
 	}
+	if readyCount < expectedCount {
+		return jmeterv1.TestRunPhasePending, fmt.Sprintf("%d/%d workers ready", readyCount, expectedCount)
+	}
 
-	if allDone && len(pods) >= expectedCount {
+	// All workers are ready; check master state.
+	if masterPod == nil {
+		return jmeterv1.TestRunPhaseWorkersReady, "All workers ready, waiting for master pod to start"
+	}
+
+	switch masterPod.Status.Phase {
+	case corev1.PodRunning:
+		return jmeterv1.TestRunPhaseRunning, "Test running"
+	case corev1.PodSucceeded:
+		// Master finished; check workers too.
+		anyFailed := false
+		allWorkersDone := true
+		for _, pod := range workerPods {
+			switch pod.Status.Phase {
+			case corev1.PodSucceeded:
+				// ok
+			case corev1.PodFailed:
+				anyFailed = true
+			default:
+				allWorkersDone = false
+			}
+		}
+		if !allWorkersDone {
+			return jmeterv1.TestRunPhaseRunning, "Master completed, waiting for workers to finish"
+		}
 		if anyFailed {
 			return jmeterv1.TestRunPhaseFailed, "One or more pods failed"
 		}
 		return jmeterv1.TestRunPhaseCompleted, "All pods completed successfully"
+	case corev1.PodFailed:
+		return jmeterv1.TestRunPhaseFailed, "Master pod failed"
+	default:
+		return jmeterv1.TestRunPhaseWorkersReady, "Master pod starting"
 	}
-	return jmeterv1.TestRunPhaseRunning, fmt.Sprintf("%d/%d pods running", len(pods), expectedCount)
 }
 
 // setPhase patches only the Status.Phase and Status.Message fields.
@@ -270,27 +349,45 @@ func (r *TestRunReconciler) setPhase(ctx context.Context, testRun *jmeterv1.Test
 	return result, nil
 }
 
-// listOwnedPods returns all pods that are owned by this TestRun.
-func (r *TestRunReconciler) listOwnedPods(ctx context.Context, testRun *jmeterv1.TestRun) ([]corev1.Pod, error) {
+// listOwnedWorkerPods returns all worker pods owned by this TestRun.
+func (r *TestRunReconciler) listOwnedWorkerPods(ctx context.Context, testRun *jmeterv1.TestRun) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(testRun.Namespace),
-		client.MatchingLabels{labelTestRun: testRun.Name},
+		client.MatchingLabels{labelTestRun: testRun.Name, labelRole: labelRoleWorker},
 	); err != nil {
 		return nil, err
 	}
 	return podList.Items, nil
 }
 
-// deleteOwnedPods deletes all pods owned by the given TestRun.
+// listOwnedMasterPod returns the master pod owned by this TestRun, or nil if it does not exist.
+func (r *TestRunReconciler) listOwnedMasterPod(ctx context.Context, testRun *jmeterv1.TestRun) (*corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(testRun.Namespace),
+		client.MatchingLabels{labelTestRun: testRun.Name, labelRole: labelRoleMaster},
+	); err != nil {
+		return nil, err
+	}
+	if len(podList.Items) == 0 {
+		return nil, nil
+	}
+	return &podList.Items[0], nil
+}
+
+// deleteOwnedPods deletes all pods (workers and master) owned by the given TestRun.
 func (r *TestRunReconciler) deleteOwnedPods(ctx context.Context, testRun *jmeterv1.TestRun) error {
-	pods, err := r.listOwnedPods(ctx, testRun)
-	if err != nil {
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(testRun.Namespace),
+		client.MatchingLabels{labelTestRun: testRun.Name},
+	); err != nil {
 		return err
 	}
-	for i := range pods {
-		if err := r.Delete(ctx, &pods[i]); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("deleting pod %s: %w", pods[i].Name, err)
+	for i := range podList.Items {
+		if err := r.Delete(ctx, &podList.Items[i]); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("deleting pod %s: %w", podList.Items[i].Name, err)
 		}
 	}
 	return nil
@@ -333,6 +430,7 @@ func (r *TestRunReconciler) buildPod(
 	}
 	pod.Labels[labelTestRun] = testRun.Name
 	pod.Labels[labelRunGroup] = groupName
+	pod.Labels[labelRole] = labelRoleWorker
 
 	// Always enforce restartPolicy
 	pod.Spec.RestartPolicy = corev1.RestartPolicyNever
@@ -361,19 +459,80 @@ func (r *TestRunReconciler) buildPod(
 	}
 
 	// Enforce image and required env vars on the jmeter-slave container
-	pod.Spec.Containers[slaveIdx].Image = testRun.Spec.SlaveImage
+	pod.Spec.Containers[slaveIdx].Image = testRun.Spec.Slave.Image
 	pod.Spec.Containers[slaveIdx].Env = mergeEnvVars(
 		pod.Spec.Containers[slaveIdx].Env,
 		[]corev1.EnvVar{
 			{Name: "TESTRUN_NAME", Value: testRun.Name},
 			{Name: "RUN_GROUP", Value: groupName},
-			{Name: "THREAD_COUNT", Value: strconv.Itoa(int(threadCount))},
+			{Name: groupName + "_THREAD_COUNT", Value: strconv.Itoa(int(threadCount))},
 		},
 	)
-
+	// Apply TestRun-level mounts to the worker container.
+	applyMounts(testRun.Spec.Slave.Mounts, pod, "jmeter-slave")
 	// Set ownerReference so pods are GC-ed when TestRun is deleted
 	_ = controllerutil.SetControllerReference(testRun, pod, r.Scheme)
 	return pod
+}
+
+// applyMounts adds volumes and volumeMounts from the given mounts list to the pod.
+// It targets the container identified by containerName and skips entries where
+// neither ConfigMap nor PVC is set. Duplicates (by volume name) are not added twice.
+func applyMounts(mounts []jmeterv1.MountSpec, pod *corev1.Pod, containerName string) {
+	for _, m := range mounts {
+		// Build the Volume source.
+		var volSrc corev1.VolumeSource
+		switch {
+		case m.ConfigMap != "":
+			volSrc = corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: m.ConfigMap},
+					DefaultMode:          func() *int32 { i := int32(0755); return &i }(),
+				},
+			}
+		case m.PVC != "":
+			volSrc = corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: m.PVC,
+				},
+			}
+		default:
+			continue // neither source set — skip
+		}
+
+		// Add Volume if not already present (template may have declared it).
+		volFound := false
+		for _, v := range pod.Spec.Volumes {
+			if v.Name == m.Name {
+				volFound = true
+				break
+			}
+		}
+		if !volFound {
+			pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: m.Name, VolumeSource: volSrc})
+		}
+
+		// Add VolumeMount to the target container if not already present.
+		for i, c := range pod.Spec.Containers {
+			if c.Name != containerName {
+				continue
+			}
+			mountFound := false
+			for _, vm := range c.VolumeMounts {
+				if vm.Name == m.Name {
+					mountFound = true
+					break
+				}
+			}
+			if !mountFound {
+				pod.Spec.Containers[i].VolumeMounts = append(
+					pod.Spec.Containers[i].VolumeMounts,
+					corev1.VolumeMount{Name: m.Name, MountPath: m.MountPath},
+				)
+			}
+			break
+		}
+	}
 }
 
 // mergeEnvVars returns base env vars with overrides applied (override wins on duplicate Name).
@@ -394,9 +553,137 @@ func mergeEnvVars(base, overrides []corev1.EnvVar) []corev1.EnvVar {
 	return result
 }
 
-// podName returns a deterministic pod name.
+// podName returns a deterministic worker pod name.
 func podName(testRunName, groupName string, index int) string {
 	return fmt.Sprintf("%s-%s-%d", testRunName, groupName, index)
+}
+
+// masterPodName returns the deterministic name for the master pod of a TestRun.
+func masterPodName(testRunName string) string {
+	return fmt.Sprintf("%s-master", testRunName)
+}
+
+// isPodReady returns true if the pod's Ready condition is True.
+func isPodReady(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady {
+			return cond.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+// reconcileMasterPod creates the master pod once all worker pods are Ready and have IPs.
+// It is a no-op when spec.master is not set or the master pod already exists.
+func (r *TestRunReconciler) reconcileMasterPod(ctx context.Context, testRun *jmeterv1.TestRun, workerPods []corev1.Pod) error {
+	if testRun.Spec.Master == nil {
+		return nil
+	}
+
+	// Check if master already exists.
+	existing, err := r.listOwnedMasterPod(ctx, testRun)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+
+	// Calculate expected worker count.
+	expectedCount := 0
+	for _, g := range testRun.Spec.RunGroups {
+		base := g.Base
+		if base <= 0 {
+			base = defaultBase
+		}
+		expectedCount += int(math.Ceil(float64(g.Thread) / float64(base)))
+	}
+
+	// Wait until all workers are Ready and have IPs.
+	if len(workerPods) < expectedCount {
+		return nil
+	}
+	slaveHosts := make([]string, 0, len(workerPods))
+	for i := range workerPods {
+		if !isPodReady(&workerPods[i]) || workerPods[i].Status.PodIP == "" {
+			return nil
+		}
+		slaveHosts = append(slaveHosts, workerPods[i].Status.PodIP)
+	}
+
+	logger := log.FromContext(ctx)
+	name := masterPodName(testRun.Name)
+	pod := r.buildMasterPod(testRun, name, strings.Join(slaveHosts, ","))
+	if err := r.Create(ctx, pod); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating master pod %s: %w", name, err)
+	}
+	logger.Info("Created master pod", "pod", name, "slaveHosts", strings.Join(slaveHosts, ","))
+	return nil
+}
+
+// buildMasterPod constructs the master Pod object.
+// If ControllerConfig.MasterPodTemplate is set it is used as the base; the controller
+// then enforces labels, restartPolicy, image, and TESTRUN_NAME/SLAVE_HOSTS env vars.
+func (r *TestRunReconciler) buildMasterPod(testRun *jmeterv1.TestRun, name, slaveHosts string) *corev1.Pod {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: testRun.Namespace,
+		},
+	}
+
+	// Apply controller-level master pod template as base.
+	if r.Config != nil && r.Config.MasterPodTemplate != nil {
+		tpl := r.Config.MasterPodTemplate.DeepCopy()
+		pod.Annotations = tpl.Annotations
+		for k, v := range tpl.Labels {
+			if pod.Labels == nil {
+				pod.Labels = make(map[string]string)
+			}
+			pod.Labels[k] = v
+		}
+		pod.Spec = tpl.Spec
+	}
+
+	// Always enforce controller labels.
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	pod.Labels[labelTestRun] = testRun.Name
+	pod.Labels[labelRole] = labelRoleMaster
+
+	// Always enforce restartPolicy.
+	pod.Spec.RestartPolicy = corev1.RestartPolicyNever
+
+	// Find or create the "jmeter-master" container.
+	masterIdx := -1
+	for i, c := range pod.Spec.Containers {
+		if c.Name == "jmeter-master" {
+			masterIdx = i
+			break
+		}
+	}
+	if masterIdx == -1 {
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "jmeter-master"})
+		masterIdx = len(pod.Spec.Containers) - 1
+	}
+
+	// Enforce image and required env vars on the jmeter-master container.
+	pod.Spec.Containers[masterIdx].Image = testRun.Spec.Master.Image
+	pod.Spec.Containers[masterIdx].Env = mergeEnvVars(
+		pod.Spec.Containers[masterIdx].Env,
+		[]corev1.EnvVar{
+			{Name: "TESTRUN_NAME", Value: testRun.Name},
+			{Name: "SLAVE_HOSTS", Value: slaveHosts},
+		},
+	)
+
+	// Apply TestRun-level mounts to the master container.
+	applyMounts(testRun.Spec.Master.Mounts, pod, "jmeter-master")
+
+	// Set ownerReference so the pod is GC-ed when TestRun is deleted.
+	_ = controllerutil.SetControllerReference(testRun, pod, r.Scheme)
+	return pod
 }
 
 // podThreadCount reads the THREAD_COUNT env var from a pod.

@@ -38,3 +38,35 @@ podTemplate:
       - name: jmeter-scripts
         configMap:
           name: jmeter-scripts
+
+# masterPodTemplate: base template applied to the master pod.
+# The controller always overrides: labels, restartPolicy=Never,
+# the "jmeter-master" container image, and TESTRUN_NAME/SLAVE_HOSTS env vars.
+# All other fields below are applied as-is.
+masterPodTemplate:
+  metadata:
+    annotations:
+      prometheus.io/scrape: "false"
+  spec:
+    terminationGracePeriodSeconds: 30
+    tolerations:
+      - key: "jmeter"
+        operator: "Equal"
+        value: "master"
+        effect: "NoSchedule"
+    containers:
+      - name: jmeter-master       # must be named "jmeter-master"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        volumeMounts:
+          - name: jmeter-scripts
+            mountPath: /scripts
+    volumes:
+      - name: jmeter-scripts
+        configMap:
+          name: jmeter-scripts
