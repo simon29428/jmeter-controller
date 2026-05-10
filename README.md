@@ -48,14 +48,8 @@ TestRun CR
 ## 快速開始
 
 ```bash
-# 套用 CRD
-kubectl apply -f config/crd/jmeter.jmeter.io_testruns.yaml
-
 # 部署 Controller
-kubectl apply -f config/manager/manager.yaml
-
-# 執行測試（僅 worker，無 master）
-kubectl apply -f config/samples/testrun_sample2.yaml
+kubectl apply -k config/install/
 
 # 執行測試（master + worker）
 kubectl apply -f config/samples/testrun_sample.yaml
@@ -70,7 +64,7 @@ kubectl describe tr example-testrun
 ## TestRun 資源
 
 ```yaml
-apiVersion: jmeter.jmeter.io/v1
+apiVersion: jmeter.io/v1
 kind: TestRun
 metadata:
   name: my-test
@@ -248,7 +242,7 @@ masterPodTemplate:    # master pod 的基礎模板
 | `spec.restartPolicy` | `Never` |
 | 容器 `name` | `jmeter-slave`（不存在時自動建立）|
 | 容器 `image` | TestRun 的 `spec.slave.image` |
-| 環境變數 | `TESTRUN_NAME`、`RUN_GROUP`、`THREAD_COUNT`（見下方說明）|
+| 環境變數 | `TESTRUN_NAME`、`RUN_GROUP`、`{RUN_GROUP}_THREAD_COUNT`（見下方說明）|
 
 **範例：**
 
@@ -291,7 +285,7 @@ podTemplate:
 | `spec.restartPolicy` | `Never` |
 | 容器 `name` | `jmeter-master`（不存在時自動建立）|
 | 容器 `image` | TestRun 的 `spec.master.image` |
-| 環境變數 | `TESTRUN_NAME`、`SLAVE_HOSTS`、`SCRIPT_PATH`（見下方說明）|
+| 環境變數 | `TESTRUN_NAME`、`SLAVE_HOSTS`、`SCRIPT_PATH`、`REPORT_PATH`（選填，見下方說明）|
 
 **範例：**
 
@@ -328,7 +322,7 @@ masterPodTemplate:
 |---|---|
 | `TESTRUN_NAME` | TestRun 名稱 |
 | `RUN_GROUP` | Run group 名稱 |
-| `THREAD_COUNT` | 分配給此 pod 的執行緒數 |
+| `{RUN_GROUP}_THREAD_COUNT` | 分配給此 pod 的執行緒數（例如 `group-a_THREAD_COUNT`）|
 
 ### Master Pod
 
