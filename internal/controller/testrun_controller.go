@@ -28,7 +28,7 @@ const (
 	finalizerName         = "jmeter.io/finalizer"
 	labelTestRun          = "jmeter.io/testrun"
 	labelRunGroup         = "jmeter.io/rungroup"
-	labelRole             = "jmeter.jmeter.io/role"
+	labelRole             = "jmeter.io/role"
 	labelRoleWorker       = "worker"
 	labelRoleMaster       = "master"
 	defaultBase     int32 = 50

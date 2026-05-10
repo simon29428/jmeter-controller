@@ -39,9 +39,9 @@ TestRun CR
 
 | Label | 值 |
 |---|---|
-| `jmeter.jmeter.io/testrun` | TestRun 名稱 |
-| `jmeter.jmeter.io/rungroup` | Run group 名稱（僅 worker）|
-| `jmeter.jmeter.io/role` | `worker` 或 `master` |
+| `jmeter.io/testrun` | TestRun 名稱 |
+| `jmeter.io/rungroup` | Run group 名稱（僅 worker）|
+| `jmeter.io/role` | `worker` 或 `master` |
 
 ---
 
@@ -78,11 +78,14 @@ metadata:
 spec:
   slave:            # 必填
     image: alpine/jmeter:5.6
+    env: []         # 選填
     mounts: []      # 選填
 
   master:           # 選填 — 省略則不建立 master pod
     image: alpine/jmeter:5.6
     scriptPath: /scripts/test-plan.jmx
+    reportPath: /report  # 選填
+    env: []         # 選填
     mounts: []      # 選填
 
   runGroups:        # 必填，至少一個 run group
@@ -241,7 +244,7 @@ masterPodTemplate:    # master pod 的基礎模板
 
 | 強制覆蓋欄位 | 值 |
 |---|---|
-| Labels | `jmeter.jmeter.io/testrun`、`jmeter.jmeter.io/rungroup`、`jmeter.jmeter.io/role=worker` |
+| Labels | `jmeter.io/testrun`、`jmeter.io/rungroup`、`jmeter.io/role=worker` |
 | `spec.restartPolicy` | `Never` |
 | 容器 `name` | `jmeter-slave`（不存在時自動建立）|
 | 容器 `image` | TestRun 的 `spec.slave.image` |
@@ -284,7 +287,7 @@ podTemplate:
 
 | 強制覆蓋欄位 | 值 |
 |---|---|
-| Labels | `jmeter.jmeter.io/testrun`、`jmeter.jmeter.io/role=master` |
+| Labels | `jmeter.io/testrun`、`jmeter.io/role=master` |
 | `spec.restartPolicy` | `Never` |
 | 容器 `name` | `jmeter-master`（不存在時自動建立）|
 | 容器 `image` | TestRun 的 `spec.master.image` |
