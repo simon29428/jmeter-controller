@@ -9,6 +9,7 @@ while IFS='=' read -r key value; do
   fi
 done < <(env)
 
+echo "Starting JMeter server with the following arguments:"
 echo "${JMETER_ARGS[@]}"
 
 /opt/jmeter/bin/jmeter-server "${JMETER_ARGS[@]}" -Dserver.rmi.ssl.disable=true
