@@ -71,12 +71,12 @@ metadata:
   namespace: default
 spec:
   slave:            # 必填
-    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
     env: []         # 選填
     mounts: []      # 選填
 
   master:           # 選填 — 省略則不建立 master pod
-    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
     scriptPath: /scripts/test-plan.jmx
     reportPath: /report  # 選填
     env: []         # 選填
@@ -142,7 +142,7 @@ thread: 80             →  2 個 pod：[50t, 30t]  （base 預設為 50）
 
 ```yaml
 slave:
-  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
   mounts:
     - name: jmeter-scripts
       mountPath: /scripts
@@ -152,7 +152,7 @@ slave:
       claimName: test-data-pvc                # 掛載 PVC
 
 master:
-  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+  image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
   scriptPath: /scripts/test-plan.jmx
   mounts:
     - name: jmeter-scripts

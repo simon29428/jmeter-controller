@@ -6,9 +6,9 @@ metadata:
   namespace: jmeter-system
 spec:
   slave:
-    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
   master:
-    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.3
     # env vars are injected before SCRIPT_PATH / REPORT_PATH,
     # so they can be referenced via $(VAR_NAME) in those fields.
     env:
