@@ -71,12 +71,12 @@ metadata:
   namespace: default
 spec:
   slave:            # 必填
-    image: alpine/jmeter:5.6
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
     env: []         # 選填
     mounts: []      # 選填
 
   master:           # 選填 — 省略則不建立 master pod
-    image: alpine/jmeter:5.6
+    image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2
     scriptPath: /scripts/test-plan.jmx
     reportPath: /report  # 選填
     env: []         # 選填
