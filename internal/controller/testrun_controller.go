@@ -494,10 +494,10 @@ func applyMounts(mounts []jmeterv1.MountSpec, pod *corev1.Pod, containerName str
 					DefaultMode:          func() *int32 { i := int32(0755); return &i }(),
 				},
 			}
-		case m.PVC != "":
+		case m.ClaimName != "":
 			volSrc = corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: m.PVC,
+					ClaimName: m.ClaimName,
 				},
 			}
 		default:

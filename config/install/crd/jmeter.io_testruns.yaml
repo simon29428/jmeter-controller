@@ -91,7 +91,7 @@ spec:
                       description: MountSpec defines a volume to be mounted into pods.
                       properties:
                         configMap:
-                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with PVC.
+                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with ClaimName.
                           type: string
                         mountPath:
                           description: MountPath is the absolute path in the container where the volume is mounted.
@@ -101,8 +101,8 @@ spec:
                           description: Name is the unique name for this volume, used as the Kubernetes volume name.
                           minLength: 1
                           type: string
-                        pvc:
-                          description: PVC is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
+                        claimName:
+                          description: ClaimName is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
                           type: string
                       required:
                       - mountPath
@@ -150,7 +150,7 @@ spec:
                       description: MountSpec defines a volume to be mounted into pods.
                       properties:
                         configMap:
-                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with PVC.
+                          description: ConfigMap is the name of the ConfigMap to mount. Mutually exclusive with ClaimName.
                           type: string
                         mountPath:
                           description: MountPath is the absolute path in the container where the volume is mounted.
@@ -160,8 +160,8 @@ spec:
                           description: Name is the unique name for this volume, used as the Kubernetes volume name.
                           minLength: 1
                           type: string
-                        pvc:
-                          description: PVC is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
+                        claimName:
+                          description: ClaimName is the name of the PersistentVolumeClaim to mount. Mutually exclusive with ConfigMap.
                           type: string
                       required:
                       - mountPath

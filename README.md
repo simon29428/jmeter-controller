@@ -135,8 +135,8 @@ thread: 80             →  2 個 pod：[50t, 30t]  （base 預設為 50）
 |---|---|---|---|
 | `name` | string | ✅ | Kubernetes Volume 名稱（在同一 pod 內須唯一）|
 | `mountPath` | string | ✅ | 容器內的掛載絕對路徑 |
-| `configMap` | string | — | 要掛載的 ConfigMap 名稱，與 `pvc` 互斥 |
-| `pvc` | string | — | 要掛載的 PersistentVolumeClaim 名稱，與 `configMap` 互斥 |
+| `configMap` | string | — | 要掛載的 ConfigMap 名稱，與 `claimName` 互斥 |
+| `claimName` | string | — | 要掛載的 PersistentVolumeClaim 名稱，與 `configMap` 互斥 |
 
 **範例：**
 
@@ -149,7 +149,7 @@ slave:
       configMap: my-scripts-configmap   # 掛載 ConfigMap
     - name: test-data
       mountPath: /data
-      pvc: test-data-pvc                # 掛載 PVC
+      claimName: test-data-pvc                # 掛載 PVC
 
 master:
   image: ghcr.io/simon29428/jmeter-controller-jmeter:base-v1.0.2

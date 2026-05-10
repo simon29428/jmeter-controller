@@ -16,14 +16,14 @@ type MountSpec struct {
 	MountPath string `json:"mountPath"`
 
 	// ConfigMap is the name of the ConfigMap to mount.
-	// Mutually exclusive with PVC.
+	// Mutually exclusive with ClaimName.
 	// +optional
 	ConfigMap string `json:"configMap,omitempty"`
 
-	// PVC is the name of the PersistentVolumeClaim to mount.
+	// ClaimName is the name of the PersistentVolumeClaim to mount.
 	// Mutually exclusive with ConfigMap.
 	// +optional
-	PVC string `json:"pvc,omitempty"`
+	ClaimName string `json:"claimName,omitempty"`
 }
 
 // SlaveSpec defines the configuration for JMeter worker (slave) pods.
