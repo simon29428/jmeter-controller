@@ -16,4 +16,4 @@ configMapGenerator:
 images:
 - name: jmeter-controller
   newName: ghcr.io/simon29428/jmeter-controller-main
-  newTag: v1.0.1
+  newTag: v1.0.2
